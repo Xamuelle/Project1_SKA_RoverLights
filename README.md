@@ -1,0 +1,93 @@
+/*
+Tried coding MC2515 with ATMega32U4
+byte0 = color:
+ 0 = off
+ 1 = red
+ 2 = blue
+ 3 = green
+ 4 = yellow
+byte1 = buzzer:
+ 0 = off
+ 1 = on
+*/
+ 
+#include <SPI.h>
+#include <mcp2515.h>
+#include "mcp_can.h"
+
+#define ON HIGH
+#define OFF LOW
+
+const int CAN_CS = 1;
+const int LED_RED = 2;
+const int LED_BLUE = 3;
+const int LED_GREEN = 4;
+const int LED_YELLOW = 5;
+const int BUZZER = 6;
+
+const unsigned long CAN_ID = 0x200UL;
+
+MCP_CAN CAN(CAN_CS);
+
+uint8_t lightmode = 0;
+bool buz = false;
+
+void setup() {
+    Serial.begin(115200);
+    
+    pinMode(CAN_CS, OUTPUT);
+    digitalWrite(CAN_CS, HIGH);
+    
+    pinMode(LED_RED, OUTPUT);
+    pinMode(LED_BLUE, OUTPUT);
+    pinMode(LED_GREEN, OUTPUT);
+    pinMode(LED_YELLOW, OUTPUT);
+    pinMode(BUZZER, OUTPUT);
+    
+    SPI.begin();
+    
+    if (CAN.begin(MCP_STDEXT, CAN_500KBPS, MCP_8MHZ) == CAN_OK) {
+        Serial.println("MCP2515 OK");
+    }
+    else {
+        Serial.println("MCP2515 FAIL");
+        while (1);
+    }
+    
+    CAN.setMode(MCP_NORMAL);
+    Serial.println("Listening on CAN ID 0x200");
+    
+    digitalWrite(LED_RED, OFF);
+    digitalWrite(LED_BLUE, OFF);
+    digitalWrite(LED_GREEN, OFF);
+    digitalWrite(LED_YELLOW, OFF);
+    digitalWrite(BUZZER, OFF);
+}
+
+void loop() {
+    if (CAN_MSGAVAIL == CAN.checkReceive()) {
+        uint8_t len = 0;
+        uint8_t buf[8];
+        CAN.readMsgBuf(&len, buf);
+        unsigned long id = CAN.getCanId();
+        
+        if (id == CAN_ID && len >= 1) {
+            uint8_t state = buf[0];
+            lightmode = state;
+            
+            buz = (state & (1 << 4)) != 0;
+            
+            digitalWrite(LED_RED, (state & (1 << 0)) ? ON : OFF);
+            digitalWrite(LED_BLUE, (state & (1 << 1)) ? ON : OFF);
+            digitalWrite(LED_GREEN, (state & (1 << 2)) ? ON : OFF);
+            digitalWrite(LED_YELLOW, (state & (1 << 3)) ? ON : OFF);
+            
+            digitalWrite(BUZZER, buz ? ON : OFF);
+            
+            Serial.print("RX ID 0x"); Serial.print(id, HEX);
+            Serial.print("mode = "); Serial.print(lightmode);
+            Serial.print("buz = "); Serial.println(buz ? "1" : "0");
+        }
+    }
+    delay(5);
+}
